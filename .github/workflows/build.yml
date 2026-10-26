@@ -1,0 +1,82 @@
+# Builds the Windows ColorBreakdown.exe and the macOS ColorBreakdown.app on
+# GitHub-hosted runners. Every run keeps both under the run's "Artifacts".
+# Pushing a tag like v1.1 also publishes a GitHub Release with both attached,
+# which is what the Download links in README.md point to.
+name: Build apps
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: python -m pip install --upgrade pillow numpy pyinstaller
+
+      # Same PyInstaller call as build-windows.bat (minus the interactive pause).
+      - name: Build ColorBreakdown.exe
+        run: >
+          python -m PyInstaller --noconfirm --clean --onefile --windowed
+          --name ColorBreakdown
+          --icon AppIcon.ico
+          --add-data "AppIcon.png;."
+          color_breakdown.py
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ColorBreakdown-windows
+          path: windows/dist/ColorBreakdown.exe
+          if-no-files-found: error
+
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build ColorBreakdown.app
+        run: ./build.sh
+
+      # ditto keeps the bundle's permissions and signature intact inside the zip.
+      - name: Zip the app
+        run: ditto -c -k --keepParent ColorBreakdown.app ColorBreakdown-mac.zip
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ColorBreakdown-mac
+          path: ColorBreakdown-mac.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          ColorBreakdown.exe ColorBreakdown-mac.zip
+          --repo "$GITHUB_REPOSITORY"
+          --title "Color Breakdown $GITHUB_REF_NAME"
+          --generate-notes

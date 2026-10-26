@@ -3,10 +3,38 @@
 A small app that lists every color in an image with its hex code, a swatch,
 and how much of the image it covers.
 
+## Download
+
+| Platform | Download | |
+|---|---|---|
+| **Windows 10/11** | [ColorBreakdown.exe](https://github.com/Buffalo-Stampeders/color-breakdown/releases/latest/download/ColorBreakdown.exe) | Single file, no install needed |
+| **macOS 13+ (Apple Silicon)** | [ColorBreakdown-mac.zip](https://github.com/Buffalo-Stampeders/color-breakdown/releases/latest/download/ColorBreakdown-mac.zip) | Unzip, drag the app into Applications |
+
+Older versions are on the [Releases page](https://github.com/Buffalo-Stampeders/color-breakdown/releases).
+
+Neither download is signed with a paid developer certificate, so the first
+launch needs one extra step:
+
+- **Windows:** if "Windows protected your PC" appears, click
+  **More info → Run anyway**.
+- **Mac:** if macOS says it can't verify the app, open
+  **System Settings → Privacy & Security**, scroll down and click
+  **Open Anyway** next to Color Breakdown. (On macOS 13–14 you can instead
+  right-click the app → **Open**.)
+
+## Building it yourself
+
 - **macOS (Apple Silicon):** native SwiftUI app — this folder, instructions below.
 - **Windows:** see the `windows/` folder and `windows/README-Windows.md`.
+- **Automatic builds:** every push to `main` builds both apps on GitHub
+  (Actions tab → latest run → *Artifacts*). Pushing a version tag such as
+  `v1.1` publishes a new Release, which updates the Download links above:
+  ```
+  git tag v1.1
+  git push origin v1.1
+  ```
 
-## Build (one time)
+## Build on a Mac (one time)
 
 1. Make sure the Xcode Command Line Tools are installed:
    ```
