@@ -1,0 +1,10 @@
+# Mac build output
+ColorBreakdown.app/
+
+# Windows / PyInstaller build output
+windows/build/
+windows/dist/
+windows/*.spec
+__pycache__/
+
+.DS_Store
