@@ -1,7 +1,7 @@
-# Builds the Windows ColorBreakdown.exe and the macOS ColorBreakdown.app on
-# GitHub-hosted runners. Every run keeps both under the run's "Artifacts".
-# Pushing a tag like v1.1 also publishes a GitHub Release with both attached,
-# which is what the Download links in README.md point to.
+# Builds the Windows and macOS apps on GitHub-hosted runners. Every run keeps
+# them under the run's "Artifacts". Pushing a tag like v1.2.0 also publishes a
+# GitHub Release with them attached. The Download links in README.md and the
+# apps' update check both point at that release. See RELEASING.md.
 name: Build apps
 
 on:
@@ -24,22 +24,52 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install build dependencies
-        run: python -m pip install --upgrade pillow numpy pyinstaller
+      - name: Build (build-windows.bat)
+        shell: cmd
+        run: build-windows.bat --ci
 
-      # Same PyInstaller call as build-windows.bat (minus the interactive pause).
-      - name: Build ColorBreakdown.exe
+      - name: Test install.bat and uninstall.bat
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dest = Join-Path $env:LOCALAPPDATA 'Programs\Color Breakdown'
+          $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ColorBreakdown'
+          $links = 'Programs', 'Desktop' | ForEach-Object {
+            Join-Path ([Environment]::GetFolderPath($_)) 'Color Breakdown.lnk' }
+
+          & .\dist\install.bat /quiet /desktop
+          if ($LASTEXITCODE) { throw "install.bat exited with $LASTEXITCODE" }
+          foreach ($p in @("$dest\ColorBreakdown.exe", "$dest\uninstall.bat") + $links) {
+            if (-not (Test-Path -LiteralPath $p)) { throw "Missing after install: $p" }
+          }
+          $entry = Get-ItemProperty $key
+          $expected = (Select-String -Path color_breakdown.py -Pattern '^VERSION = "(.+)"').Matches[0].Groups[1].Value
+          if ($entry.DisplayVersion -ne $expected) {
+            throw "Installed version '$($entry.DisplayVersion)' doesn't match VERSION '$expected'"
+          }
+          "Installed: $($entry.DisplayName) $($entry.DisplayVersion) by $($entry.Publisher)"
+
+          & "$dest\uninstall.bat" /quiet
+          Start-Sleep -Seconds 2
+          foreach ($p in @($dest, $key) + $links) {
+            if (Test-Path -LiteralPath $p) { throw "Still present after uninstall: $p" }
+          }
+          "Uninstalled cleanly"
+          exit 0
+
+      - name: Zip the installer bundle
+        shell: pwsh
         run: >
-          python -m PyInstaller --noconfirm --clean --onefile --windowed
-          --name ColorBreakdown
-          --icon AppIcon.ico
-          --add-data "AppIcon.png;."
-          color_breakdown.py
+          Compress-Archive -Force
+          -Path dist\ColorBreakdown.exe, dist\install.bat, dist\uninstall.bat
+          -DestinationPath dist\ColorBreakdown-windows.zip
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: ColorBreakdown-windows
-          path: windows/dist/ColorBreakdown.exe
+          path: |
+            windows/dist/ColorBreakdown.exe
+            windows/dist/ColorBreakdown-windows.zip
           if-no-files-found: error
 
   mac:
@@ -48,13 +78,13 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Build ColorBreakdown.app
-        run: ./build.sh
+        run: ./build.sh --no-install
 
       # ditto keeps the bundle's permissions and signature intact inside the zip.
       - name: Zip the app
         run: ditto -c -k --keepParent ColorBreakdown.app ColorBreakdown-mac.zip
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: ColorBreakdown-mac
           path: ColorBreakdown-mac.zip
@@ -67,8 +97,22 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the tag matches both apps' version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          mac=$(sed -n 's/^ *static let version = "\(.*\)".*/\1/p' ColorBreakdown.swift | head -1)
+          win=$(sed -n 's/^VERSION = "\(.*\)".*/\1/p' windows/color_breakdown.py | head -1)
+          echo "tag=$tag mac=$mac windows=$win"
+          if [[ "$mac" != "$tag" || "$win" != "$tag" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match AppInfo.version ($mac) and VERSION ($win). Bump both, commit, and tag again."
+            exit 1
+          fi
+
       - uses: actions/download-artifact@v6
         with:
+          path: release
           merge-multiple: true
 
       - name: Publish GitHub Release
@@ -76,7 +120,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: >
           gh release create "$GITHUB_REF_NAME"
-          ColorBreakdown.exe ColorBreakdown-mac.zip
-          --repo "$GITHUB_REPOSITORY"
+          release/ColorBreakdown.exe
+          release/ColorBreakdown-windows.zip
+          release/ColorBreakdown-mac.zip
           --title "Color Breakdown $GITHUB_REF_NAME"
           --generate-notes

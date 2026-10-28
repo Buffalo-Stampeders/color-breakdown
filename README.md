@@ -7,10 +7,16 @@ and how much of the image it covers.
 
 | Platform | Download | |
 |---|---|---|
-| **Windows 10/11** | [ColorBreakdown.exe](https://github.com/Buffalo-Stampeders/color-breakdown/releases/latest/download/ColorBreakdown.exe) | Single file, no install needed |
+| **Windows 10/11** | [ColorBreakdown-windows.zip](https://github.com/Buffalo-Stampeders/color-breakdown/releases/latest/download/ColorBreakdown-windows.zip) | Unzip, run `install.bat`. Adds it to the Start Menu and Settings → Apps |
+| Windows, no install | [ColorBreakdown.exe](https://github.com/Buffalo-Stampeders/color-breakdown/releases/latest/download/ColorBreakdown.exe) | Single file, run it from anywhere |
 | **macOS 13+ (Apple Silicon)** | [ColorBreakdown-mac.zip](https://github.com/Buffalo-Stampeders/color-breakdown/releases/latest/download/ColorBreakdown-mac.zip) | Unzip, drag the app into Applications |
 
 Older versions are on the [Releases page](https://github.com/Buffalo-Stampeders/color-breakdown/releases).
+
+Both apps check this repo's Releases when they start and offer the new
+version when there is one (Mac: **Color Breakdown → Check for Updates…**;
+Windows: **Check for Updates** button). They open the download page; they
+never replace themselves.
 
 Neither download is signed with a paid developer certificate, so the first
 launch needs one extra step:
@@ -27,14 +33,10 @@ launch needs one extra step:
 - **macOS (Apple Silicon):** native SwiftUI app — this folder, instructions below.
 - **Windows:** see the `windows/` folder and `windows/README-Windows.md`.
 - **Automatic builds:** every push to `main` builds both apps on GitHub
-  (Actions tab → latest run → *Artifacts*). Pushing a version tag such as
-  `v1.1` publishes a new Release, which updates the Download links above:
-  ```
-  git tag v1.1
-  git push origin v1.1
-  ```
+  (Actions tab → latest run → *Artifacts*). Publishing a new version is
+  covered in [RELEASING.md](RELEASING.md).
 
-## Build on a Mac (one time)
+## Build and install on a Mac
 
 1. Make sure the Xcode Command Line Tools are installed:
    ```
@@ -46,12 +48,16 @@ launch needs one extra step:
    chmod +x build.sh
    ./build.sh
    ```
-3. `ColorBreakdown.app` appears in the same folder. Double-click it or drag it
-   into `/Applications`.
+3. The app is built and installed into `/Applications` (or `~/Applications`
+   if `/Applications` isn't writable), so it shows up in Launchpad, Spotlight
+   and the Applications folder. Re-running the script quits a running copy
+   and upgrades it.
+
+   `./build.sh --no-install` only builds `ColorBreakdown.app` in this folder.
 
 Because the app is built on your own Mac and ad-hoc signed, it runs without any
-Gatekeeper warning. (If you copy it to another Mac you'd have to right-click →
-Open the first time.)
+Gatekeeper warning. (Copied to another Mac it needs the one-time
+**Open Anyway** step above.)
 
 ## Using it
 

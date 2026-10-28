@@ -5,15 +5,42 @@ with its hex code, percentage and pixel count; click a row to copy the hex;
 Exact / Fine / Medium / Coarse grouping; minimum-coverage filter (10% by
 default); CSV export.
 
-## Option A — build a standalone .exe (recommended)
+The easiest way to get it is the ready-made download in the main
+[README](../README.md#download). Unzip `ColorBreakdown-windows.zip` and run
+`install.bat`.
+
+## Installing
+
+`install.bat` installs for the current user only, so no admin rights are needed:
+
+- copies the app to `%LOCALAPPDATA%\Programs\Color Breakdown`
+- adds **Color Breakdown** to the Start Menu, and asks whether to add a
+  Desktop shortcut too
+- lists it in **Settings → Apps → Installed apps**, where it can be
+  uninstalled (or run `uninstall.bat`)
+
+Running `install.bat` from a newer version upgrades in place. Options:
+`/desktop` (add the Desktop shortcut without asking), `/quiet` (no prompts).
+
+The first launch of the unsigned .exe may show a SmartScreen prompt. Click
+*More info → Run anyway* once.
+
+## Updates
+
+The app checks GitHub for a newer release each time it starts, and the
+**Check for Updates** button checks on demand. If there is one, it offers to
+open the download page.
+
+## Option A — build the .exe yourself
 
 1. Install Python 3 from https://www.python.org/downloads/windows/ and tick
    **"Add python.exe to PATH"** during setup.
 2. Double-click `build-windows.bat`. It installs the libraries it needs and
-   produces `dist\ColorBreakdown.exe` (about 30–40 MB, fully self-contained).
-3. Move `ColorBreakdown.exe` wherever you like and run it. The first launch of
-   an unsigned .exe may show a SmartScreen prompt — click *More info → Run
-   anyway* once.
+   produces a `dist\` folder with `ColorBreakdown.exe` (about 30 MB, fully
+   self-contained, version number in its Properties), `install.bat` and
+   `uninstall.bat`.
+3. It then asks whether to install on this PC. To install on another PC,
+   copy the whole `dist\` folder there and run `install.bat`.
 
 ## Option B — run from source
 

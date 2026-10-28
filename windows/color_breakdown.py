@@ -12,8 +12,11 @@ Build a standalone Windows .exe:  see build-windows.bat
 from __future__ import annotations
 
 import csv
+import json
+import re
 import sys
 import threading
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,6 +28,41 @@ try:                                   # optional: HEIC/HEIF (iPhone photos)
     register_heif_opener()
 except Exception:
     pass
+
+VERSION = "1.2.0"   # bump for every release; the release tag must match (v1.2.0)
+UPDATE_REPO = "Buffalo-Stampeders/color-breakdown"   # GitHub owner/repo; "" disables update checks
+
+# --------------------------------------------------------------------------- #
+# Update check (no GUI dependencies)
+# --------------------------------------------------------------------------- #
+
+
+def version_tuple(version: str) -> tuple[int, ...]:
+    """'v1.10.0' -> (1, 10, 0)"""
+    parts = version.strip().lstrip("vV").split(".")
+    return tuple(int(m.group()) if (m := re.match(r"\d+", p)) else 0 for p in parts)
+
+
+def is_newer(candidate: str, current: str) -> bool:
+    a, b = version_tuple(candidate), version_tuple(current)
+    n = max(len(a), len(b))
+    return a + (0,) * (n - len(a)) > b + (0,) * (n - len(b))
+
+
+def latest_release(repo: str = UPDATE_REPO, timeout: float = 8) -> tuple[str, str] | None:
+    """(tag, release page URL) of the latest GitHub release, or None on any failure
+    (offline, no releases, private repo, bad JSON)."""
+    if not repo:
+        return None
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}/releases/latest",
+        headers={"Accept": "application/vnd.github+json", "User-Agent": f"ColorBreakdown/{VERSION}"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.load(resp)
+        return str(data["tag_name"]), str(data["html_url"])
+    except Exception:
+        return None
 
 # --------------------------------------------------------------------------- #
 # Analysis engine (no GUI dependencies — importable and testable on its own)
@@ -127,6 +165,7 @@ def qualifying(result: AnalysisResult | None, minimum_percent: float) -> list[Co
 
 def main(argv: list[str]) -> None:
     import tkinter as tk
+    import webbrowser
     from tkinter import filedialog, messagebox, ttk
     from PIL import ImageTk
 
@@ -182,6 +221,8 @@ def main(argv: list[str]) -> None:
             ttk.Button(bar, text="Open Image…", command=self.open_dialog).pack(side="left")
             self.export_btn = ttk.Button(bar, text="Export CSV…", command=self.export_csv, state="disabled")
             self.export_btn.pack(side="left", padx=(8, 0))
+            ttk.Button(bar, text="Check for Updates",
+                       command=lambda: self.check_updates(interactive=True)).pack(side="right")
             ttk.Label(bar, textvariable=self.status, foreground="gray").pack(side="left", padx=16)
 
             body = ttk.Frame(self.root)
@@ -442,6 +483,32 @@ def main(argv: list[str]) -> None:
                 return
             self.status.set(f"Exported {Path(path).name}")
 
+        # ---- updates ------------------------------------------------------ #
+
+        def check_updates(self, interactive: bool = False):
+            """Launch checks stay silent unless there's an update; the button
+            (`interactive`) also reports "up to date" or that the check failed."""
+            def work():
+                release = latest_release()
+                self.root.after(0, lambda: self._update_result(release, interactive))
+
+            threading.Thread(target=work, daemon=True).start()
+
+        def _update_result(self, release, interactive: bool):
+            if release and is_newer(release[0], VERSION):
+                tag, page = release
+                if messagebox.askyesno(
+                        "Update available",
+                        f"Color Breakdown {tag.lstrip('vV')} is available. You have {VERSION}.\n\n"
+                        "Open the download page?"):
+                    webbrowser.open(page)
+            elif interactive and release:
+                messagebox.showinfo("You're up to date",
+                                    f"Color Breakdown {VERSION} is the latest version.")
+            elif interactive:
+                messagebox.showwarning("Couldn't check for updates",
+                                       "Check your internet connection and try again.")
+
     root = Root()
     try:                                   # window/taskbar icon, if present
         icon = Path(__file__).with_name("AppIcon.png")
@@ -455,6 +522,7 @@ def main(argv: list[str]) -> None:
     app = App(root)
     if len(argv) > 1:
         root.after(100, lambda: app.open(argv[1]))
+    root.after(1500, app.check_updates)
     root.mainloop()
 
 

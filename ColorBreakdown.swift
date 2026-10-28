@@ -3,6 +3,82 @@ import AppKit
 import ImageIO
 import UniformTypeIdentifiers
 
+// MARK: - Version & updates
+
+enum AppInfo {
+    /// Bump for every release; the release tag must match (v1.2.0). build.sh reads this line.
+    static let version = "1.2.0"
+    /// GitHub "owner/repo" whose Releases are checked on launch. "" disables update checks.
+    static let updateRepo = "Buffalo-Stampeders/color-breakdown"
+}
+
+enum UpdateChecker {
+    struct Release {
+        let version: String
+        let page: URL
+    }
+
+    /// "v1.10.0" -> [1, 10, 0]
+    static func components(_ version: String) -> [Int] {
+        var s = version.trimmingCharacters(in: .whitespaces)
+        if s.first == "v" || s.first == "V" { s.removeFirst() }
+        return s.split(separator: ".").map { Int($0.prefix(while: \.isNumber)) ?? 0 }
+    }
+
+    static func isNewer(_ candidate: String, than current: String) -> Bool {
+        let a = components(candidate), b = components(current)
+        for i in 0..<max(a.count, b.count) {
+            let x = i < a.count ? a[i] : 0
+            let y = i < b.count ? b[i] : 0
+            if x != y { return x > y }
+        }
+        return false
+    }
+
+    /// The latest GitHub release, or nil on any failure (offline, no releases, private repo, bad JSON).
+    static func latestRelease() async -> Release? {
+        guard !AppInfo.updateRepo.isEmpty,
+              let api = URL(string: "https://api.github.com/repos/\(AppInfo.updateRepo)/releases/latest")
+        else { return nil }
+        var request = URLRequest(url: api, timeoutInterval: 8)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tag = json["tag_name"] as? String,
+              let page = (json["html_url"] as? String).flatMap(URL.init(string:))
+        else { return nil }
+        return Release(version: tag, page: page)
+    }
+
+    /// Launch checks stay silent unless there's an update; the menu command (`interactive`)
+    /// also reports "up to date" or that the check failed.
+    @MainActor
+    static func check(interactive: Bool) async {
+        let release = await latestRelease()
+        let alert = NSAlert()
+        if let release = release, isNewer(release.version, than: AppInfo.version) {
+            let latest = release.version.hasPrefix("v") ? String(release.version.dropFirst()) : release.version
+            alert.messageText = "Update available"
+            alert.informativeText = "Color Breakdown \(latest) is available. You have \(AppInfo.version)."
+            alert.addButton(withTitle: "Download")
+            alert.addButton(withTitle: "Later")
+            if alert.runModal() == .alertFirstButtonReturn {
+                NSWorkspace.shared.open(release.page)
+            }
+        } else if interactive {
+            if release != nil {
+                alert.messageText = "You're up to date"
+                alert.informativeText = "Color Breakdown \(AppInfo.version) is the latest version."
+            } else {
+                alert.messageText = "Couldn't check for updates"
+                alert.informativeText = "Check your internet connection and try again."
+            }
+            alert.runModal()
+        }
+    }
+}
+
 // MARK: - Analysis
 
 enum Precision: String, CaseIterable, Identifiable {
@@ -234,6 +310,9 @@ final class AppModel: ObservableObject {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        Task { await UpdateChecker.check(interactive: false) }
+    }
     func application(_ application: NSApplication, open urls: [URL]) {
         if let url = urls.first { AppModel.shared.open(url) }
     }
@@ -252,6 +331,11 @@ struct ColorBreakdownApp: App {
                 .frame(minWidth: 780, minHeight: 500)
         }
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    Task { await UpdateChecker.check(interactive: true) }
+                }
+            }
             CommandGroup(replacing: .newItem) {
                 Button("Open Image…") { model.presentOpenPanel() }
                     .keyboardShortcut("o", modifiers: .command)
